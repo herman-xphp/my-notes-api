@@ -47,3 +47,7 @@ coverage.html
 
 # Air (live reload)
 tmp/
+
+# Backup
+backup/
+.backup/
