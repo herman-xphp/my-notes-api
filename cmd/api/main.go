@@ -12,6 +12,8 @@ import (
 	fiberlogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/herman-xphp/my-notes-api/configs"
+	"github.com/herman-xphp/my-notes-api/internal/repository"
+	"github.com/herman-xphp/my-notes-api/internal/repository/mysql"
 	"github.com/herman-xphp/my-notes-api/pkg/database"
 	"github.com/herman-xphp/my-notes-api/pkg/response"
 	"gorm.io/gorm"
@@ -38,6 +40,10 @@ func main() {
 	if err := database.RunMigrations(db, "migrations"); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
+
+	// Initialize repositories
+	initRepositories(db)
+	log.Println("Repositories initialized")
 
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
@@ -154,4 +160,12 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	}
 
 	return response.Error(c, code, "An error occurred", err.Error())
+}
+
+func initRepositories(db *gorm.DB) *repository.Repositories {
+	return &repository.Repositories{
+		User:         mysql.NewUserRepository(db),
+		Note:         mysql.NewNoteRepository(db),
+		RefreshToken: mysql.NewRefreshTokenRepository(db),
+	}
 }

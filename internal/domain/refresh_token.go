@@ -4,9 +4,9 @@ import "time"
 
 type RefreshToken struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	UserID    uint      `gorm:"not null;index:idx_user_id" json:"user_id"`
-	Token     string    `gorm:"type:varchar(500);uniqueIndex;not null" json:"token"`
-	ExpiresAt time.Time `gorm:"not null;index:idx_expires_at" json:"expires_at"`
+	UserID    uint      `gorm:"not null;index:idx_refresh_tokens_user_id" json:"user_id"`
+	Token     string    `gorm:"type:varchar(500);uniqueIndex;index:idx_refresh_tokens_token;not null" json:"token"`
+	ExpiresAt time.Time `gorm:"not null;index:idx_refresh_tokens_expires_at" json:"expires_at"`
 	CreatedAt time.Time `json:"created_at"`
 
 	// Relations
