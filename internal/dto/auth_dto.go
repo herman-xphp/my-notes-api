@@ -30,7 +30,7 @@ type AuthResponse struct {
 // UserResponse represents user data in response
 type UserResponse struct {
 	ID        uint   `json:"id"`
-	Name      uint   `json:"name"`
-	Email     uint   `json:"email"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
 }
