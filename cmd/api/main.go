@@ -9,53 +9,80 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	fiberlogger "github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/herman-xphp/my-notes-api/configs"
-	"github.com/herman-xphp/my-notes-api/internal/repository"
-	"github.com/herman-xphp/my-notes-api/internal/repository/mysql"
-	"github.com/herman-xphp/my-notes-api/pkg/database"
-	"github.com/herman-xphp/my-notes-api/pkg/response"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/herman-xphp/my-notes-api/configs"
+	"github.com/herman-xphp/my-notes-api/internal/handler"
+	"github.com/herman-xphp/my-notes-api/internal/middleware"
+	"github.com/herman-xphp/my-notes-api/internal/repository"
+	"github.com/herman-xphp/my-notes-api/internal/repository/mysql"
+	"github.com/herman-xphp/my-notes-api/internal/service"
+	"github.com/herman-xphp/my-notes-api/internal/utils"
+	"github.com/herman-xphp/my-notes-api/pkg/database"
 )
 
 func main() {
 	// Load configuration
 	cfg, err := configs.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatalf("❌ Failed to load configuration: %v", err)
 	}
 
-	log.Printf("Starting %s in %s mode...", cfg.App.Name, cfg.App.Env)
+	log.Printf("🚀 Starting %s in %s mode...", cfg.App.Name, cfg.App.Env)
 
 	// Connect to database
 	db, err := connectDatabase(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("❌ Failed to connect to database: %v", err)
 	}
 	defer closeDatabase(db)
 
 	// Run migrations
 	if err := database.RunMigrations(db, "migrations"); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Fatalf("❌ Failed to run migrations: %v", err)
 	}
 
+	// Initialize JWT manager
+	jwtManager := utils.NewJWTManager(
+		cfg.JWT.Secret,
+		cfg.JWT.AccessTokenExp,
+		cfg.JWT.RefreshTokenExp,
+	)
+
 	// Initialize repositories
-	initRepositories(db)
-	log.Println("Repositories initialized")
+	repos := initRepositories(db)
+	log.Println("✅ Repositories initialized")
+
+	// Initialize services
+	services := initServices(repos, jwtManager)
+	log.Println("✅ Services initialized")
+
+	// Initialize handlers
+	handlers := initHandlers(services, db)
+	log.Println("✅ Handlers initialized")
 
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
-		ErrorHandler: errorHandler,
+		ErrorHandler: middleware.ErrorHandler,
 	})
 
-	// Setup middleware
+	// Setup middlewares
 	setupMiddlewares(app, cfg)
 
 	// Setup routes
-	setupRoutes(app)
+	handler.SetupRoutes(
+		app,
+		handlers.auth,
+		handlers.note,
+		handlers.health,
+		jwtManager,
+	)
+
+	log.Println("✅ Routes configured")
 
 	// Start server
 	go startServer(app, cfg)
@@ -65,13 +92,13 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	log.Println("🛑 Shutting down server...")
 
 	if err := app.Shutdown(); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		log.Printf("❌ Server forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exited gracefully")
+	log.Println("✅ Server exited gracefully")
 }
 
 func connectDatabase(cfg *configs.Config) (*gorm.DB, error) {
@@ -96,70 +123,8 @@ func connectDatabase(cfg *configs.Config) (*gorm.DB, error) {
 
 func closeDatabase(db *gorm.DB) {
 	if err := database.Close(db); err != nil {
-		log.Printf("Failed to close database: %v", err)
+		log.Printf("❌ Failed to close database: %v", err)
 	}
-}
-
-func setupMiddlewares(app *fiber.App, cfg *configs.Config) {
-	// Recover from panics
-	app.Use(recover.New())
-
-	// Logger middleware
-	app.Use(fiberlogger.New(fiberlogger.Config{
-		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
-	}))
-
-	// CROS middleware
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: cfg.CORS.AllowedOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-	}))
-}
-
-func setupRoutes(app *fiber.App) {
-	// API v1 routes
-	api := app.Group("/api/v1")
-
-	// Health check
-	api.Get("/health", func(c *fiber.Ctx) error {
-		return response.Success(c, "Server is healthy", fiber.Map{
-			"status": "ok",
-			"env":    os.Getenv("APP_ENV"),
-		})
-	})
-
-	// Welcome route
-	app.Get("/", func(c *fiber.Ctx) error {
-		return response.Success(c, "Welcome to My Notes API", fiber.Map{
-			"version": "1.0.0",
-			"docs":    "/api/v1/docs",
-		})
-	})
-
-	// 404 handler
-	app.Use(func(c *fiber.Ctx) error {
-		return response.NotFound(c, "Route not found")
-	})
-}
-
-func startServer(app *fiber.App, cfg *configs.Config) {
-	addr := fmt.Sprintf(":%s", cfg.App.Port)
-	log.Printf("Server is running on http://localhost%s", addr)
-
-	if err := app.Listen(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
-}
-
-func errorHandler(c *fiber.Ctx, err error) error {
-	code := fiber.StatusInternalServerError
-
-	if e, ok := err.(*fiber.Error); ok {
-		code = e.Code
-	}
-
-	return response.Error(c, code, "An error occurred", err.Error())
 }
 
 func initRepositories(db *gorm.DB) *repository.Repositories {
@@ -167,5 +132,64 @@ func initRepositories(db *gorm.DB) *repository.Repositories {
 		User:         mysql.NewUserRepository(db),
 		Note:         mysql.NewNoteRepository(db),
 		RefreshToken: mysql.NewRefreshTokenRepository(db),
+	}
+}
+
+type Services struct {
+	auth service.AuthService
+	note service.NoteService
+}
+
+func initServices(repos *repository.Repositories, jwtManager *utils.JWTManager) *Services {
+	return &Services{
+		auth: service.NewAuthService(repos.User, repos.RefreshToken, jwtManager),
+		note: service.NewNoteService(repos.Note, repos.User),
+	}
+}
+
+type Handlers struct {
+	auth   *handler.AuthHandler
+	note   *handler.NoteHandler
+	health *handler.HealthHandler
+}
+
+func initHandlers(services *Services, db *gorm.DB) *Handlers {
+	return &Handlers{
+		auth:   handler.NewAuthHandler(services.auth),
+		note:   handler.NewNoteHandler(services.note),
+		health: handler.NewHealthHandler(db),
+	}
+}
+
+func setupMiddlewares(app *fiber.App, cfg *configs.Config) {
+	// Request ID
+	app.Use(middleware.RequestID())
+
+	// Recover from panics
+	app.Use(recover.New())
+
+	// Logger middleware
+	app.Use(logger.New(logger.Config{
+		Format: "[${time}] ${status} - ${latency} ${method} ${path} | ${locals:requestID}\n",
+	}))
+
+	// CORS middleware
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: cfg.CORS.AllowedOrigins,
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+	}))
+
+	// General rate limiting
+	app.Use(middleware.GeneralRateLimit())
+}
+
+func startServer(app *fiber.App, cfg *configs.Config) {
+	addr := fmt.Sprintf(":%s", cfg.App.Port)
+	log.Printf("✅ Server is running on http://localhost%s", addr)
+	log.Printf("📚 API Documentation: http://localhost%s/api/v1/health", addr)
+
+	if err := app.Listen(addr); err != nil {
+		log.Fatalf("❌ Failed to start server: %v", err)
 	}
 }
