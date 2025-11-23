@@ -9,22 +9,22 @@ import (
 	"github.com/herman-xphp/my-notes-api/pkg/response"
 )
 
-// AuthHadler handles authentication endpoints
-type AuthHadler struct {
+// AuthHandler handles authentication endpoints
+type AuthHandler struct {
 	authService service.AuthService
 	validator   *utils.Validator
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(authService service.AuthService) *AuthHadler {
-	return &AuthHadler{
+func NewAuthHandler(authService service.AuthService) *AuthHandler {
+	return &AuthHandler{
 		authService: authService,
 		validator:   utils.NewValidator(),
 	}
 }
 
 // Register handler user registration
-func (h *AuthHadler) Register(c *fiber.Ctx) error {
+func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req dto.RegisterRequest
 
 	// Parse request body
@@ -46,7 +46,7 @@ func (h *AuthHadler) Register(c *fiber.Ctx) error {
 }
 
 // Login handler user login
-func (h *AuthHadler) Login(c *fiber.Ctx) error {
+func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req dto.LoginRequest
 
 	// Parse request body
@@ -68,7 +68,7 @@ func (h *AuthHadler) Login(c *fiber.Ctx) error {
 }
 
 // RefreshToken handler token refresh
-func (h *AuthHadler) RefreshToken(c *fiber.Ctx) error {
+func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	var req dto.RefreshTokenRequest
 
 	// Parse request body
@@ -90,7 +90,7 @@ func (h *AuthHadler) RefreshToken(c *fiber.Ctx) error {
 }
 
 // Logout handles user logout (single device)
-func (h *AuthHadler) Logout(c *fiber.Ctx) error {
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	// Call service
@@ -102,7 +102,7 @@ func (h *AuthHadler) Logout(c *fiber.Ctx) error {
 }
 
 // LogoutAll handles user logout from all device
-func (h *AuthHadler) LogoutAll(c *fiber.Ctx) error {
+func (h *AuthHandler) LogoutAll(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	// Call service
@@ -114,7 +114,7 @@ func (h *AuthHadler) LogoutAll(c *fiber.Ctx) error {
 }
 
 // Me returns current user info
-func (h *AuthHadler) Me(c *fiber.Ctx) error {
+func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	userEmail := middleware.GetUserEmail(c)
 
