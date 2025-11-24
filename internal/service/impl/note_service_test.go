@@ -1,4 +1,4 @@
-package service
+package impl
 
 import (
 	"context"
@@ -13,17 +13,18 @@ import (
 	"github.com/herman-xphp/my-notes-api/internal/dto"
 	"github.com/herman-xphp/my-notes-api/internal/repository"
 	repomock "github.com/herman-xphp/my-notes-api/internal/repository/mock"
+	"github.com/herman-xphp/my-notes-api/internal/service"
 )
 
-func setupNoteServiceTest() (NoteService, *repomock.NoteRepository, *repomock.UserRepository) {
+func setupNoteServiceTest() (service.NoteService, *repomock.NoteRepository, *repomock.UserRepository) {
 	mockNoteRepo := new(repomock.NoteRepository)
 	mockUserRepo := new(repomock.UserRepository)
-	service := NewNoteService(mockNoteRepo, mockUserRepo)
-	return service, mockNoteRepo, mockUserRepo
+	svc := NewNoteService(mockNoteRepo, mockUserRepo)
+	return svc, mockNoteRepo, mockUserRepo
 }
 
 func TestNoteService_Create_Success(t *testing.T) {
-	service, mockNoteRepo, mockUserRepo := setupNoteServiceTest()
+	svc, mockNoteRepo, mockUserRepo := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -43,7 +44,7 @@ func TestNoteService_Create_Success(t *testing.T) {
 	mockNoteRepo.On("Create", ctx, mock.AnythingOfType("*domain.Note")).Return(nil)
 
 	// Execute
-	result, err := service.Create(ctx, userID, req)
+	result, err := svc.Create(ctx, userID, req)
 
 	// Assert
 	assert.NoError(t, err)
@@ -59,7 +60,7 @@ func TestNoteService_Create_Success(t *testing.T) {
 }
 
 func TestNoteService_Create_UserNotFound(t *testing.T) {
-	service, mockNoteRepo, mockUserRepo := setupNoteServiceTest()
+	svc, mockNoteRepo, mockUserRepo := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(999)
@@ -72,11 +73,11 @@ func TestNoteService_Create_UserNotFound(t *testing.T) {
 	mockUserRepo.On("FindByID", ctx, userID).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	result, err := service.Create(ctx, userID, req)
+	result, err := svc.Create(ctx, userID, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrNoteNotFound, err)
+	assert.Equal(t, service.ErrUserNotFound, err)
 	assert.Nil(t, result)
 
 	mockUserRepo.AssertExpectations(t)
@@ -116,7 +117,7 @@ func TestNoteService_GetByID_Success(t *testing.T) {
 }
 
 func TestNoteService_GetByID_NotFound(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -126,11 +127,11 @@ func TestNoteService_GetByID_NotFound(t *testing.T) {
 	mockNoteRepo.On("FindByID", ctx, noteID, userID).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	result, err := service.GetByID(ctx, noteID, userID)
+	result, err := svc.GetByID(ctx, noteID, userID)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrNoteNotFound, err)
+	assert.Equal(t, service.ErrNoteNotFound, err)
 	assert.Nil(t, result)
 
 	mockNoteRepo.AssertExpectations(t)
@@ -329,7 +330,7 @@ func TestNoteService_Update_PartialUpdate(t *testing.T) {
 }
 
 func TestNoteService_Update_NotFound(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -343,11 +344,11 @@ func TestNoteService_Update_NotFound(t *testing.T) {
 	mockNoteRepo.On("FindByID", ctx, noteID, userID).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	result, err := service.Update(ctx, noteID, userID, req)
+	result, err := svc.Update(ctx, noteID, userID, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrNoteNotFound, err)
+	assert.Equal(t, service.ErrNoteNotFound, err)
 	assert.Nil(t, result)
 
 	mockNoteRepo.AssertExpectations(t)
@@ -380,7 +381,7 @@ func TestNoteService_Delete_Success(t *testing.T) {
 }
 
 func TestNoteService_Delete_NotFound(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -390,18 +391,18 @@ func TestNoteService_Delete_NotFound(t *testing.T) {
 	mockNoteRepo.On("FindByID", ctx, noteID, userID).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	err := service.Delete(ctx, noteID, userID)
+	err := svc.Delete(ctx, noteID, userID)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrNoteNotFound, err)
+	assert.Equal(t, service.ErrNoteNotFound, err)
 
 	mockNoteRepo.AssertExpectations(t)
 	mockNoteRepo.AssertNotCalled(t, "Delete")
 }
 
 func TestNoteService_Restore_Success(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -421,7 +422,7 @@ func TestNoteService_Restore_Success(t *testing.T) {
 	mockNoteRepo.On("FindByID", ctx, noteID, userID).Return(restoredNote, nil)
 
 	// Execute
-	result, err := service.Restore(ctx, noteID, userID)
+	result, err := svc.Restore(ctx, noteID, userID)
 
 	// Assert
 	assert.NoError(t, err)
@@ -432,7 +433,7 @@ func TestNoteService_Restore_Success(t *testing.T) {
 }
 
 func TestNoteService_HardDelete_Success(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -449,7 +450,7 @@ func TestNoteService_HardDelete_Success(t *testing.T) {
 	mockNoteRepo.On("HardDelete", ctx, noteID, userID).Return(nil)
 
 	// Execute
-	err := service.HardDelete(ctx, noteID, userID)
+	err := svc.HardDelete(ctx, noteID, userID)
 
 	// Assert
 	assert.NoError(t, err)
@@ -457,7 +458,7 @@ func TestNoteService_HardDelete_Success(t *testing.T) {
 }
 
 func TestNoteService_HardDelete_NotFound(t *testing.T) {
-	service, mockNoteRepo, _ := setupNoteServiceTest()
+	svc, mockNoteRepo, _ := setupNoteServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -467,11 +468,11 @@ func TestNoteService_HardDelete_NotFound(t *testing.T) {
 	mockNoteRepo.On("FindByID", ctx, noteID, userID).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	err := service.HardDelete(ctx, noteID, userID)
+	err := svc.HardDelete(ctx, noteID, userID)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrNoteNotFound, err)
+	assert.Equal(t, service.ErrNoteNotFound, err)
 
 	mockNoteRepo.AssertExpectations(t)
 	mockNoteRepo.AssertNotCalled(t, "HardDelete")
