@@ -1,4 +1,4 @@
-package service
+package impl
 
 import (
 	"context"
@@ -9,35 +9,23 @@ import (
 	"github.com/herman-xphp/my-notes-api/internal/domain"
 	"github.com/herman-xphp/my-notes-api/internal/dto"
 	"github.com/herman-xphp/my-notes-api/internal/repository"
+	"github.com/herman-xphp/my-notes-api/internal/service"
 	"gorm.io/gorm"
 )
-
-var (
-	ErrNoteNotFound       = errors.New("note not found")
-	ErrUnauthorizedAccess = errors.New("unauthorized access to note")
-)
-
-// NoteService defines note business logic
-type NoteService interface {
-	Create(ctx context.Context, userID uint, req dto.CreateNoteRequest) (*dto.NoteResponse, error)
-	GetByID(ctx context.Context, noteID, userID uint) (*dto.NoteResponse, error)
-	GetAll(ctx context.Context, userID uint, req dto.NoteQueryRequest) (*dto.NoteListResponse, error)
-	Update(ctx context.Context, noteID, userID uint, req dto.UpdateNoteRequest) (*dto.NoteResponse, error)
-	Delete(ctx context.Context, noteID, userID uint) error
-	Restore(ctx context.Context, noteID, userID uint) (*dto.NoteResponse, error)
-	HardDelete(ctx context.Context, noteID, userID uint) error
-}
 
 type noteService struct {
 	noteRepo repository.NoteRepository
 	userRepo repository.UserRepository
 }
 
+// Ensure noteService implements service.NoteService
+var _ service.NoteService = (*noteService)(nil)
+
 // NewNoteService creates a new note service instance
 func NewNoteService(
 	noteRepo repository.NoteRepository,
 	userRepo repository.UserRepository,
-) NoteService {
+) service.NoteService {
 	return &noteService{
 		noteRepo: noteRepo,
 		userRepo: userRepo,
@@ -48,7 +36,7 @@ func (s *noteService) Create(ctx context.Context, userID uint, req dto.CreateNot
 	// Verify user exists
 	if _, err := s.userRepo.FindByID(ctx, userID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNoteNotFound
+			return nil, service.ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
@@ -63,6 +51,7 @@ func (s *noteService) Create(ctx context.Context, userID uint, req dto.CreateNot
 	if err := s.noteRepo.Create(ctx, note); err != nil {
 		return nil, fmt.Errorf("failed to create note: %w", err)
 	}
+
 	// Build response
 	return &dto.NoteResponse{
 		ID:        note.ID,
@@ -72,13 +61,12 @@ func (s *noteService) Create(ctx context.Context, userID uint, req dto.CreateNot
 		UpdatedAt: note.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
-
 func (s *noteService) GetByID(ctx context.Context, noteID, userID uint) (*dto.NoteResponse, error) {
 	// Find note with ownership check
 	note, err := s.noteRepo.FindByID(ctx, noteID, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNoteNotFound
+			return nil, service.ErrNoteNotFound
 		}
 		return nil, fmt.Errorf("failed to find note: %w", err)
 	}
@@ -91,7 +79,6 @@ func (s *noteService) GetByID(ctx context.Context, noteID, userID uint) (*dto.No
 		CreatedAt: note.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: note.UpdatedAt.Format(time.RFC3339),
 	}, nil
-
 }
 func (s *noteService) GetAll(ctx context.Context, userID uint, req dto.NoteQueryRequest) (*dto.NoteListResponse, error) {
 	// Set default values
@@ -139,13 +126,12 @@ func (s *noteService) GetAll(ctx context.Context, userID uint, req dto.NoteQuery
 		},
 	}, nil
 }
-
 func (s *noteService) Update(ctx context.Context, noteID, userID uint, req dto.UpdateNoteRequest) (*dto.NoteResponse, error) {
 	// Find note with ownership check
 	note, err := s.noteRepo.FindByID(ctx, noteID, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNoteNotFound
+			return nil, service.ErrNoteNotFound
 		}
 		return nil, fmt.Errorf("failed to find note: %w", err)
 	}
@@ -171,14 +157,13 @@ func (s *noteService) Update(ctx context.Context, noteID, userID uint, req dto.U
 		CreatedAt: note.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: note.UpdatedAt.Format(time.RFC3339),
 	}, nil
-
 }
 func (s *noteService) Delete(ctx context.Context, noteID, userID uint) error {
-	// Find note with ownership check (verify if exists and belongs to user)
+	// Find note with ownership check
 	_, err := s.noteRepo.FindByID(ctx, noteID, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrNoteNotFound
+			return service.ErrNoteNotFound
 		}
 		return fmt.Errorf("failed to find note: %w", err)
 	}
@@ -196,10 +181,10 @@ func (s *noteService) Restore(ctx context.Context, noteID, userID uint) (*dto.No
 		return nil, fmt.Errorf("failed to restore note: %w", err)
 	}
 
-	// Get the restore note
+	// Get the restored note
 	note, err := s.noteRepo.FindByID(ctx, noteID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find restore note: %w", err)
+		return nil, fmt.Errorf("failed to find restored note: %w", err)
 	}
 
 	// Build response
@@ -210,22 +195,20 @@ func (s *noteService) Restore(ctx context.Context, noteID, userID uint) (*dto.No
 		CreatedAt: note.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: note.UpdatedAt.Format(time.RFC3339),
 	}, nil
-
 }
 func (s *noteService) HardDelete(ctx context.Context, noteID, userID uint) error {
 	// Verify note exists and belongs to user
 	_, err := s.noteRepo.FindByID(ctx, noteID, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrNoteNotFound
+			return service.ErrNoteNotFound
 		}
 		return fmt.Errorf("failed to find note: %w", err)
 	}
 
 	// Permanent delete
-	err = s.noteRepo.HardDelete(ctx, noteID, userID)
-	if err != nil {
-		return fmt.Errorf("failed to permanent delete: %w", err)
+	if err := s.noteRepo.HardDelete(ctx, noteID, userID); err != nil {
+		return fmt.Errorf("failed to permanently delete note: %w", err)
 	}
 
 	return nil

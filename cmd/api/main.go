@@ -20,6 +20,7 @@ import (
 	"github.com/herman-xphp/my-notes-api/internal/repository"
 	"github.com/herman-xphp/my-notes-api/internal/repository/mysql"
 	"github.com/herman-xphp/my-notes-api/internal/service"
+	"github.com/herman-xphp/my-notes-api/internal/service/impl"
 	"github.com/herman-xphp/my-notes-api/internal/utils"
 	"github.com/herman-xphp/my-notes-api/pkg/database"
 )
@@ -142,8 +143,8 @@ type Services struct {
 
 func initServices(repos *repository.Repositories, jwtManager *utils.JWTManager) *Services {
 	return &Services{
-		auth: service.NewAuthService(repos.User, repos.RefreshToken, jwtManager),
-		note: service.NewNoteService(repos.Note, repos.User),
+		auth: impl.NewAuthService(repos.User, repos.RefreshToken, jwtManager),
+		note: impl.NewNoteService(repos.Note, repos.User),
 	}
 }
 

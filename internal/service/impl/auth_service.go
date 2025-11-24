@@ -1,4 +1,4 @@
-package service
+package impl
 
 import (
 	"context"
@@ -6,29 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/herman-xphp/my-notes-api/internal/domain"
 	"github.com/herman-xphp/my-notes-api/internal/dto"
 	"github.com/herman-xphp/my-notes-api/internal/repository"
+	"github.com/herman-xphp/my-notes-api/internal/service"
 	"github.com/herman-xphp/my-notes-api/internal/utils"
+	"gorm.io/gorm"
 )
-
-var (
-	ErrEmailAlreadyExists  = errors.New("email already exists")
-	ErrInvalidCredentials  = errors.New("invalid email or password")
-	ErrUserNotFound        = errors.New("user not found")
-	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
-)
-
-// AuthService defines authentication business logic
-type AuthService interface {
-	Register(ctx context.Context, req dto.RegisterRequest) (*dto.AuthResponse, error)
-	Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error)
-	RefreshToken(ctx context.Context, req dto.RefreshTokenRequest) (*dto.AuthResponse, error)
-	Logout(ctx context.Context, userID uint) error
-	LogoutAll(ctx context.Context, userID uint) error
-}
 
 type authService struct {
 	userRepo         repository.UserRepository
@@ -36,12 +20,15 @@ type authService struct {
 	jwtManager       *utils.JWTManager
 }
 
+// Ensure authService implements service.AuthService
+var _ service.AuthService = (*authService)(nil)
+
 // NewAuthService creates a new auth service instance
 func NewAuthService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
 	jwtManager *utils.JWTManager,
-) AuthService {
+) service.AuthService {
 	return &authService{
 		userRepo:         userRepo,
 		refreshTokenRepo: refreshTokenRepo,
@@ -56,7 +43,7 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		return nil, fmt.Errorf("failed to check email existence: %w", err)
 	}
 	if exists {
-		return nil, ErrEmailAlreadyExists
+		return nil, service.ErrEmailAlreadyExists
 	}
 
 	// Hash password
@@ -79,14 +66,14 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	// Generate tokens
 	tokenPair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate tokens: %w", err)
+		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
 	// Store refresh token
 	refreshToken := &domain.RefreshToken{
 		UserID:    user.ID,
 		Token:     tokenPair.RefreshToken,
-		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 7 days
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
 	}
 
 	if err := s.refreshTokenRepo.Create(ctx, refreshToken); err != nil {
@@ -113,14 +100,14 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 	user, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidCredentials
+			return nil, service.ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
 	// Verify password
 	if err := utils.ComparePassword(user.Password, req.Password); err != nil {
-		return nil, ErrInvalidCredentials
+		return nil, service.ErrInvalidCredentials
 	}
 
 	// Generate tokens
@@ -159,23 +146,21 @@ func (s *authService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequ
 	// Validate refresh token
 	claims, err := s.jwtManager.ValidateToken(req.RefreshToken)
 	if err != nil {
-		return nil, ErrInvalidRefreshToken
+		return nil, service.ErrInvalidRefreshToken
 	}
 
 	// Find refresh token in database
 	storedToken, err := s.refreshTokenRepo.FindByToken(ctx, req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidRefreshToken
+			return nil, service.ErrInvalidRefreshToken
 		}
 		return nil, fmt.Errorf("failed to find refresh token: %w", err)
 	}
-
-	// Check if token is expired
+	// Check if token expired
 	if storedToken.IsExpired() {
-		// Delete expired token
 		_ = s.refreshTokenRepo.Delete(ctx, req.RefreshToken)
-		return nil, ErrInvalidRefreshToken
+		return nil, service.ErrInvalidRefreshToken
 	}
 
 	// Get user
@@ -203,7 +188,7 @@ func (s *authService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequ
 	}
 
 	if err := s.refreshTokenRepo.Create(ctx, newRefreshToken); err != nil {
-		return nil, fmt.Errorf("failed to store new refresh token: %w", err)
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
 	// Build response
@@ -220,13 +205,11 @@ func (s *authService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequ
 		},
 	}, nil
 }
+
 func (s *authService) Logout(ctx context.Context, userID uint) error {
-	// In a real app, you'd pass the specific refresh token to delete
-	// For now, we'll delete all tokens for the user
 	return s.refreshTokenRepo.DeleteByUserID(ctx, userID)
 }
 
 func (s *authService) LogoutAll(ctx context.Context, userID uint) error {
-	// Delete all refresh tokens for the user (logout from all devices)
 	return s.refreshTokenRepo.DeleteByUserID(ctx, userID)
 }

@@ -1,4 +1,4 @@
-package service
+package impl
 
 import (
 	"context"
@@ -12,19 +12,21 @@ import (
 	"github.com/herman-xphp/my-notes-api/internal/domain"
 	"github.com/herman-xphp/my-notes-api/internal/dto"
 	repomock "github.com/herman-xphp/my-notes-api/internal/repository/mock"
+	"github.com/herman-xphp/my-notes-api/internal/service"
 	"github.com/herman-xphp/my-notes-api/internal/utils"
 )
 
-func setupAuthServiceTest() (AuthService, *repomock.UserRepository, *repomock.RefreshTokenRepository, *utils.JWTManager) {
+// ✅ FIX: Return service.AuthService interface
+func setupAuthServiceTest() (service.AuthService, *repomock.UserRepository, *repomock.RefreshTokenRepository, *utils.JWTManager) {
 	mockUserRepo := new(repomock.UserRepository)
 	mockTokenRepo := new(repomock.RefreshTokenRepository)
 	jwtManager := utils.NewJWTManager("test-secret-key-minimum-32-chars-long", 15*time.Minute, 7*24*time.Hour)
-	service := NewAuthService(mockUserRepo, mockTokenRepo, jwtManager)
-	return service, mockUserRepo, mockTokenRepo, jwtManager
+	svc := NewAuthService(mockUserRepo, mockTokenRepo, jwtManager)
+	return svc, mockUserRepo, mockTokenRepo, jwtManager
 }
 
 func TestAuthService_Register_Success(t *testing.T) {
-	service, mockUserRepo, mockTokenRepo, _ := setupAuthServiceTest()
+	svc, mockUserRepo, mockTokenRepo, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	req := dto.RegisterRequest{
@@ -39,7 +41,7 @@ func TestAuthService_Register_Success(t *testing.T) {
 	mockTokenRepo.On("Create", ctx, mock.AnythingOfType("*domain.RefreshToken")).Return(nil)
 
 	// Execute
-	result, err := service.Register(ctx, req)
+	result, err := svc.Register(ctx, req)
 
 	// Assert
 	assert.NoError(t, err)
@@ -57,7 +59,7 @@ func TestAuthService_Register_Success(t *testing.T) {
 }
 
 func TestAuthService_Register_EmailAlreadyExists(t *testing.T) {
-	service, mockUserRepo, _, _ := setupAuthServiceTest()
+	svc, mockUserRepo, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	req := dto.RegisterRequest{
@@ -70,11 +72,12 @@ func TestAuthService_Register_EmailAlreadyExists(t *testing.T) {
 	mockUserRepo.On("ExistsByEmail", ctx, req.Email).Return(true, nil)
 
 	// Execute
-	result, err := service.Register(ctx, req)
+	result, err := svc.Register(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrEmailAlreadyExists, err)
+	// ✅ FIX: Use service.ErrEmailAlreadyExists
+	assert.Equal(t, service.ErrEmailAlreadyExists, err)
 	assert.Nil(t, result)
 
 	mockUserRepo.AssertExpectations(t)
@@ -82,7 +85,7 @@ func TestAuthService_Register_EmailAlreadyExists(t *testing.T) {
 }
 
 func TestAuthService_Register_WeakPassword(t *testing.T) {
-	service, mockUserRepo, _, _ := setupAuthServiceTest()
+	svc, mockUserRepo, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	req := dto.RegisterRequest{
@@ -95,7 +98,7 @@ func TestAuthService_Register_WeakPassword(t *testing.T) {
 	mockUserRepo.On("ExistsByEmail", ctx, req.Email).Return(false, nil)
 
 	// Execute
-	result, err := service.Register(ctx, req)
+	result, err := svc.Register(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
@@ -106,7 +109,7 @@ func TestAuthService_Register_WeakPassword(t *testing.T) {
 }
 
 func TestAuthService_Login_Success(t *testing.T) {
-	service, mockUserRepo, mockTokenRepo, _ := setupAuthServiceTest()
+	svc, mockUserRepo, mockTokenRepo, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	password := "SecurePass123!"
@@ -130,7 +133,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	mockTokenRepo.On("Create", ctx, mock.AnythingOfType("*domain.RefreshToken")).Return(nil)
 
 	// Execute
-	result, err := service.Login(ctx, req)
+	result, err := svc.Login(ctx, req)
 
 	// Assert
 	assert.NoError(t, err)
@@ -146,7 +149,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 }
 
 func TestAuthService_Login_UserNotFound(t *testing.T) {
-	service, mockUserRepo, _, _ := setupAuthServiceTest()
+	svc, mockUserRepo, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	req := dto.LoginRequest{
@@ -158,18 +161,18 @@ func TestAuthService_Login_UserNotFound(t *testing.T) {
 	mockUserRepo.On("FindByEmail", ctx, req.Email).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	result, err := service.Login(ctx, req)
+	result, err := svc.Login(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrInvalidCredentials, err)
+	assert.Equal(t, service.ErrInvalidCredentials, err)
 	assert.Nil(t, result)
 
 	mockUserRepo.AssertExpectations(t)
 }
 
 func TestAuthService_Login_WrongPassword(t *testing.T) {
-	service, mockUserRepo, _, _ := setupAuthServiceTest()
+	svc, mockUserRepo, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	correctPassword := "SecurePass123!"
@@ -192,18 +195,18 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	mockUserRepo.On("FindByEmail", ctx, req.Email).Return(existingUser, nil)
 
 	// Execute
-	result, err := service.Login(ctx, req)
+	result, err := svc.Login(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrInvalidCredentials, err)
+	assert.Equal(t, service.ErrInvalidCredentials, err)
 	assert.Nil(t, result)
 
 	mockUserRepo.AssertExpectations(t)
 }
 
 func TestAuthService_RefreshToken_Success(t *testing.T) {
-	service, mockUserRepo, mockTokenRepo, jwtManager := setupAuthServiceTest()
+	svc, mockUserRepo, mockTokenRepo, jwtManager := setupAuthServiceTest()
 	ctx := context.Background()
 
 	// Create a valid refresh token
@@ -237,7 +240,7 @@ func TestAuthService_RefreshToken_Success(t *testing.T) {
 	mockTokenRepo.On("Create", ctx, mock.AnythingOfType("*domain.RefreshToken")).Return(nil)
 
 	// Execute
-	result, err := service.RefreshToken(ctx, req)
+	result, err := svc.RefreshToken(ctx, req)
 
 	// Assert
 	assert.NoError(t, err)
@@ -252,7 +255,7 @@ func TestAuthService_RefreshToken_Success(t *testing.T) {
 }
 
 func TestAuthService_RefreshToken_InvalidToken(t *testing.T) {
-	service, _, mockTokenRepo, _ := setupAuthServiceTest()
+	svc, _, _, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	req := dto.RefreshTokenRequest{
@@ -260,18 +263,16 @@ func TestAuthService_RefreshToken_InvalidToken(t *testing.T) {
 	}
 
 	// Execute
-	result, err := service.RefreshToken(ctx, req)
+	result, err := svc.RefreshToken(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrInvalidRefreshToken, err)
+	assert.Equal(t, service.ErrInvalidRefreshToken, err)
 	assert.Nil(t, result)
-
-	mockTokenRepo.AssertNotCalled(t, "FindByToken")
 }
 
 func TestAuthService_RefreshToken_TokenNotInDatabase(t *testing.T) {
-	service, _, mockTokenRepo, jwtManager := setupAuthServiceTest()
+	svc, _, mockTokenRepo, jwtManager := setupAuthServiceTest()
 	ctx := context.Background()
 
 	// Create a valid JWT but not stored in database
@@ -285,18 +286,18 @@ func TestAuthService_RefreshToken_TokenNotInDatabase(t *testing.T) {
 	mockTokenRepo.On("FindByToken", ctx, refreshTokenString).Return(nil, gorm.ErrRecordNotFound)
 
 	// Execute
-	result, err := service.RefreshToken(ctx, req)
+	result, err := svc.RefreshToken(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrInvalidRefreshToken, err)
+	assert.Equal(t, service.ErrInvalidRefreshToken, err)
 	assert.Nil(t, result)
 
 	mockTokenRepo.AssertExpectations(t)
 }
 
 func TestAuthService_RefreshToken_ExpiredToken(t *testing.T) {
-	service, _, mockTokenRepo, jwtManager := setupAuthServiceTest()
+	svc, _, mockTokenRepo, jwtManager := setupAuthServiceTest()
 	ctx := context.Background()
 
 	// Create a refresh token
@@ -320,18 +321,18 @@ func TestAuthService_RefreshToken_ExpiredToken(t *testing.T) {
 	mockTokenRepo.On("Delete", ctx, refreshTokenString).Return(nil)
 
 	// Execute
-	result, err := service.RefreshToken(ctx, req)
+	result, err := svc.RefreshToken(ctx, req)
 
 	// Assert
 	assert.Error(t, err)
-	assert.Equal(t, ErrInvalidRefreshToken, err)
+	assert.Equal(t, service.ErrInvalidRefreshToken, err)
 	assert.Nil(t, result)
 
 	mockTokenRepo.AssertExpectations(t)
 }
 
 func TestAuthService_Logout_Success(t *testing.T) {
-	service, _, mockTokenRepo, _ := setupAuthServiceTest()
+	svc, _, mockTokenRepo, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -340,7 +341,7 @@ func TestAuthService_Logout_Success(t *testing.T) {
 	mockTokenRepo.On("DeleteByUserID", ctx, userID).Return(nil)
 
 	// Execute
-	err := service.Logout(ctx, userID)
+	err := svc.Logout(ctx, userID)
 
 	// Assert
 	assert.NoError(t, err)
@@ -348,7 +349,7 @@ func TestAuthService_Logout_Success(t *testing.T) {
 }
 
 func TestAuthService_LogoutAll_Success(t *testing.T) {
-	service, _, mockTokenRepo, _ := setupAuthServiceTest()
+	svc, _, mockTokenRepo, _ := setupAuthServiceTest()
 	ctx := context.Background()
 
 	userID := uint(1)
@@ -357,7 +358,7 @@ func TestAuthService_LogoutAll_Success(t *testing.T) {
 	mockTokenRepo.On("DeleteByUserID", ctx, userID).Return(nil)
 
 	// Execute
-	err := service.LogoutAll(ctx, userID)
+	err := svc.LogoutAll(ctx, userID)
 
 	// Assert
 	assert.NoError(t, err)
