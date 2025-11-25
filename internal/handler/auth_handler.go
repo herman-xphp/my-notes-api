@@ -12,14 +12,14 @@ import (
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
 	authService service.AuthService
-	validator   *utils.Validator
+	helper      *utils.HandlerHelper
 }
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(authService service.AuthService) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
-		validator:   utils.NewValidator(),
+		helper:      utils.NewHandlerHelper(),
 	}
 }
 
@@ -27,16 +27,10 @@ func NewAuthHandler(authService service.AuthService) *AuthHandler {
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req dto.RegisterRequest
 
-	// Parse request body
-	if err := c.BodyParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid request body", err.Error())
+	// Parse and validate
+	if !h.helper.ParseAndValidate(c, &req) {
+		return nil // Error already handled
 	}
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
-	}
-
 	// Call service
 	result, err := h.authService.Register(c.Context(), req)
 	if err != nil {
@@ -49,14 +43,8 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req dto.LoginRequest
 
-	// Parse request body
-	if err := c.BodyParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid request body", err.Error())
-	}
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
+	if !h.helper.ParseAndValidate(c, &req) {
+		return nil
 	}
 
 	// Call service
@@ -71,16 +59,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	var req dto.RefreshTokenRequest
 
-	// Parse request body
-	if err := c.BodyParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid request body", err.Error())
+	if !h.helper.ParseAndValidate(c, &req) {
+		return nil
 	}
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
-	}
-
 	// Call service
 	result, err := h.authService.RefreshToken(c.Context(), req)
 	if err != nil {

@@ -14,14 +14,14 @@ import (
 // NoteHandler handles note endpoins
 type NoteHandler struct {
 	noteService service.NoteService
-	validator   *utils.Validator
+	helper      *utils.HandlerHelper
 }
 
 // NewNoteHandler creates a new note handler
 func NewNoteHandler(noteService service.NoteService) *NoteHandler {
 	return &NoteHandler{
 		noteService: noteService,
-		validator:   utils.NewValidator(),
+		helper:      utils.NewHandlerHelper(),
 	}
 }
 
@@ -30,14 +30,8 @@ func (h *NoteHandler) Create(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	var req dto.CreateNoteRequest
 
-	// Parse request body
-	if err := c.BodyParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid request body", err.Error())
-	}
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
+	if !h.helper.ParseAndValidate(c, &req) {
+		return nil
 	}
 
 	// Call service
@@ -72,17 +66,8 @@ func (h *NoteHandler) GetAll(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	var req dto.NoteQueryRequest
 
-	// Parse query params
-	if err := c.QueryParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid query parameters", err.Error())
-	}
-
-	// Set defaults
-	req.SetDefaults()
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
+	if !h.helper.ParseQuery(c, &req) {
+		return nil
 	}
 
 	// Call service
@@ -100,21 +85,15 @@ func (h *NoteHandler) Update(c *fiber.Ctx) error {
 	var req dto.UpdateNoteRequest
 
 	// Parse note ID
-	noteID, err := strconv.ParseUint(c.Params("id"), 10, 32)
-	if err != nil {
-		return response.BadRequest(c, "Invalid note ID", err.Error())
+	noteID, ok := h.helper.ParseID(c, "id")
+	if !ok {
+		return nil
 	}
 
-	// Parse request body
-	if err := c.BodyParser(&req); err != nil {
-		return response.BadRequest(c, "Invalid request body", err.Error())
+	// Parse request body and validate request
+	if !h.helper.ParseAndValidate(c, &req) {
+		return nil
 	}
-
-	// Validate request
-	if err := h.validator.Validate(req); err != nil {
-		return response.BadRequest(c, "Validation failed", err.Error())
-	}
-
 	// Call service
 	result, err := h.noteService.Update(c.Context(), uint(noteID), userID, req)
 	if err != nil {
@@ -129,9 +108,9 @@ func (h *NoteHandler) Delete(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	// Parse note ID
-	noteID, err := strconv.ParseUint(c.Params("id"), 10, 32)
-	if err != nil {
-		return response.BadRequest(c, "Invalid note ID", err.Error())
+	noteID, ok := h.helper.ParseID(c, "id")
+	if !ok {
+		return nil
 	}
 
 	// Call service
@@ -147,11 +126,10 @@ func (h *NoteHandler) Restore(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	// Parse note ID
-	noteID, err := strconv.ParseUint(c.Params("id"), 10, 32)
-	if err != nil {
-		return response.BadRequest(c, "Invalid note ID", err.Error())
+	noteID, ok := h.helper.ParseID(c, "id")
+	if !ok {
+		return nil
 	}
-
 	// Call service
 	result, err := h.noteService.Restore(c.Context(), uint(noteID), userID)
 	if err != nil {
