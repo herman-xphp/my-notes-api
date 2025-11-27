@@ -6,13 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/herman-xphp/my-notes-api/configs"
 	"github.com/herman-xphp/my-notes-api/internal/handler"
@@ -26,31 +26,45 @@ import (
 )
 
 func main() {
-	// Load configuration
-	cfg, err := configs.Load()
+	// Load configuration dengan validasi
+	cfg, err := configs.LoadConfig()
 	if err != nil {
-		log.Fatalf("❌ Failed to load configuration: %v", err)
+		// Log error dengan detail yang jelas
+		log.Fatalf("❌ Failed to load configuration: %v\n\n"+
+			"💡 Tips:\n"+
+			"   1. Copy .env.example ke .env: cp .env.example .env\n"+
+			"   2. Generate JWT_SECRET: go run scripts/generate-secret.go\n"+
+			"   3. Update .env dengan JWT_SECRET yang baru\n"+
+			"   4. Set environment variables lainnya sesuai kebutuhan\n",
+			err)
 	}
 
-	log.Printf("🚀 Starting %s in %s mode...", cfg.App.Name, cfg.App.Env)
+	// Print startup info
+	fmt.Println("╔══════════════════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  🚀 Starting %s\n", cfg.App.Name)
+	fmt.Printf("║  📦 Environment: %s\n", cfg.App.Env)
+	fmt.Printf("║  🔌 Port: %s\n", cfg.App.Port)
+	fmt.Println("╚══════════════════════════════════════════════════════════════════════╝")
+	fmt.Println()
 
 	// Connect to database
-	db, err := connectDatabase(cfg)
+	db, err := database.Connect(&cfg.Database)
 	if err != nil {
 		log.Fatalf("❌ Failed to connect to database: %v", err)
 	}
-	defer closeDatabase(db)
+	fmt.Println("✅ Database connected successfully")
 
-	// Run migrations
-	if err := database.RunMigrations(db, "migrations"); err != nil {
+	// Run migrations (implement ini sesuai kebutuhan)
+	if err := database.RunMigrations(db); err != nil {
 		log.Fatalf("❌ Failed to run migrations: %v", err)
 	}
+	fmt.Println("✅ Database migrations completed")
 
 	// Initialize JWT manager
 	jwtManager := utils.NewJWTManager(
 		cfg.JWT.Secret,
-		cfg.JWT.AccessTokenExp,
-		cfg.JWT.RefreshTokenExp,
+		cfg.JWT.AccessTokenDuration,
+		cfg.JWT.RefreshTokenDuration,
 	)
 
 	// Initialize repositories
@@ -69,6 +83,9 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
 		ErrorHandler: middleware.ErrorHandler,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	})
 
 	// Setup middlewares
@@ -100,32 +117,6 @@ func main() {
 	}
 
 	log.Println("✅ Server exited gracefully")
-}
-
-func connectDatabase(cfg *configs.Config) (*gorm.DB, error) {
-	logLevel := gormlogger.Info
-	if cfg.IsProduction() {
-		logLevel = gormlogger.Error
-	}
-
-	db, err := database.NewMySQL(database.Config{
-		DSN:          cfg.GetDBDSN(),
-		MaxIdleConns: 10,
-		MaxOpenConns: 100,
-		LogLevel:     logLevel,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
-func closeDatabase(db *gorm.DB) {
-	if err := database.Close(db); err != nil {
-		log.Printf("❌ Failed to close database: %v", err)
-	}
 }
 
 func initRepositories(db *gorm.DB) *repository.Repositories {
