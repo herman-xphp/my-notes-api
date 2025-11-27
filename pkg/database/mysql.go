@@ -8,7 +8,32 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/herman-xphp/my-notes-api/configs"
 )
+
+func Connect(cfg *configs.DatabaseConfig) (*gorm.DB, error) {
+	// Note: We don't have IsProduction check here easily without AppConfig,
+	// but we can default to Info or pass it in.
+	// For now, let's just use Info as per original NewMySQL default or
+	// we could infer from environment if needed, but keeping it simple as per request.
+	// Actually, the original code had logic for log level based on env.
+	// Let's keep it simple for now and use NewMySQL.
+
+	return NewMySQL(Config{
+		DSN: fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.User,
+			cfg.Password,
+			cfg.Host,
+			cfg.Port,
+			cfg.Name,
+		),
+		MaxIdleConns: cfg.MaxIdleConns,
+		MaxOpenConns: cfg.MaxOpenConns,
+		MaxLifeTime:  cfg.ConnMaxLifetime,
+		LogLevel:     logger.Info, // Default to Info
+	})
+}
 
 type Config struct {
 	DSN          string
