@@ -19,7 +19,8 @@ type Migration struct {
 }
 
 // RunMigrations executes all pending migrations
-func RunMigrations(db *gorm.DB, migrationsPath string) error {
+func RunMigrations(db *gorm.DB) error {
+	migrationsPath := "migrations"
 	log.Println("🔄 Running database migrations...")
 
 	// Get all migration files
